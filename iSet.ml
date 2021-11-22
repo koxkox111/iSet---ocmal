@@ -1,9 +1,11 @@
-exception Spisz;;
-type t =
+(* Zadanie modyfikacja drzew *)
+(* Autor Pawel Dec *)
+(* Sprawdzajacy: Pawel Zurakowski *)
+type t =    (* lewe_poddrzewo; przedzial_wartosci ; prawe_poddrzewo ; glebokosc_drzewa ; dlugosc_podprzew *)
     | Empty
     | Node of t * (int * int) * t * int * int
 
-let (++) x y = (* suma lub max int*)
+let (++) x y = (* operacje + - gdzie wynik nie wychodzi poza max int *)
   if x < 0 || y < 0 then x + y
   else  if x = max_int
     || y = max_int
@@ -11,6 +13,8 @@ let (++) x y = (* suma lub max int*)
     || y > max_int - x
     then max_int
   else x + y
+let (--) x y = 
+  if y = min_int then x ++ -(y+1) ++ 1 else x ++ (-y)
 
 let empty = Empty       (* tworzy pusty set *)
 
@@ -21,42 +25,42 @@ let height t =    (* wysokosc set *)
     | Node (_, _, _, h,_) -> h
     | Empty -> 0
 
-let range (a, b) =    (* dlugosc [a,b] *)
-  if b - a + 1 <= 0 then max_int else b - a + 1
+let range (a, b) =    (* dlugosc [a,b]  lub *)
+  b -- a ++ 1
 
 let count t =   (* ile jest liczb set + dlugosc [a,b}] *)
   match t with
   |Empty -> 0
   |Node(_,(a,b),_,_,x) -> range (a,b) ++ x
 
-let make l k r = Node (l, k, r, max (height l) (height r) + 1,count l ++ count r)      (* laczy dwa sety z korzeniem k - zwraca set, k to korzen*)
+let make l k r = Node (l, k, r, max (height l) (height r) + 1,count l ++ count r)      (* laczy dwa sety z korzeniem - zwraca set, *)
 
-let rec bal l k r =             (* Balansuje drzewo, nic tu prawie nie zmienialem, na testach wchodzi z dobrym czasem *)
+let bal l k r =             (* Balansuje drzewo - bez zmian *)
   let hl = height l in
   let hr = height r in
   if hl > hr + 2 then
     match l with
     | Node (ll, lk, lr, _,_) ->
-        if height ll >= height lr then bal ll lk (make lr k r)
+        if height ll >= height lr then make ll lk (make lr k r)
         else
           (match lr with
           | Node (lrl, lrk, lrr, _,_) ->
-              bal (make ll lk lrl) lrk (make lrr k r)
+              make (make ll lk lrl) lrk (make lrr k r)
           | Empty -> assert false)
     | Empty -> assert false
   else if hr > hl + 2 then
     match r with
     | Node (rl, rk, rr, _,_) ->
-        if height rr >= height rl then bal (make l k rl) rk rr
+        if height rr >= height rl then make (make l k rl) rk rr
         else
           (match rl with
           | Node (rll, rlk, rlr, _,_) ->
-              bal (make l k rll) rlk (make rlr rk rr)
+              make (make l k rll) rlk (make rlr rk rr)
           | Empty -> assert false)
     | Empty -> assert false
   else Node (l, k, r, max hl hr + 1,count l ++ count r)
 
-let add_one (x,y) t =   (* praktycznie bez zmian - dodaje (x,y) do t, gdzie - zwraca set *)
+let add_one (x,y) t =   (* Bez zmian - zwraca set *)
     match t with 
     | Node (l, (a,b), r, h,_) ->
       if b < x then
@@ -65,7 +69,7 @@ let add_one (x,y) t =   (* praktycznie bez zmian - dodaje (x,y) do t, gdzie - zw
         bal empty (x,y) t
     | Empty -> Node (Empty, (x,y), Empty, 1,0)
 
-let rec join  l (x,y) r =   (* praktycznie bez zmian - laczy sety z przedzialem - zwraca set *)
+let rec join  l (x,y) r =   (* Bez zmian - laczy sety z przedzialem - zwraca set *)
   match (l, r) with
     (Empty, _) -> add_one  (x,y) r
   | (_, Empty) -> add_one  (x,y) l
@@ -91,8 +95,6 @@ let split x t =     (* dzieli set na L,P gdzie L < x, P > x, oraz czy x byl w t 
   let setl, pres, setr = loop x t in
     setl, pres, setr
 
-
-
 let rec find x t =    (* dla danego x znajduje poddrzewo, w ktorym ten x jest - zwraca set*)
   match t with
   |Empty -> t
@@ -100,15 +102,6 @@ let rec find x t =    (* dla danego x znajduje poddrzewo, w ktorym ten x jest - 
     if x < a then find x l
     else if b < x then find x r
     else t
-
-let mem x t = not ((find x t) = empty)    (* czy dla danego x istnieje poddrzewo, w ktorym on jest - zwraca bool*)
-
-
-let elements t =      (* posortowana lista przedzialow seta  - zwraca liste par intow*)
-  let rec loop acc t = match t with
-      Empty -> acc
-    | Node(l, k, r, _,_) -> loop (k :: loop acc r) l in
-  loop [] t
 
 let rec min_elt t = match t with      (*minimalny element set -> zwraca int*)
   | Node (Empty, k, _, _,_) -> k
@@ -132,36 +125,6 @@ let remove (a,b) t = (* usuwa przedzial [x,y] z setu - zwraca set*)
   let (la,_,_) = split a t and (_,_,hb) = split b t
   in merge la hb 
 
-let fold f t acc =
-  let rec loop acc t = match t with
-    | Empty -> acc
-    | Node (l, (a,b), r, _,_) ->
-          loop (f (a,b) (loop acc l)) r in
-  loop acc t
-
-let iter f t =
-  let rec loop t = match t with
-    | Empty -> ()
-    | Node (l, k, r, _,_) -> loop l; f k; loop r in
-  loop t
-
-let below x t =   (*ilosc elementow mniejszych od x w setcie - zwraca int*)
-  let rec pom x t acc =
-    match t with
-    |Empty -> acc
-    |Node(l,(a,b),r,_,_) ->
-      if a <= x && x <= b then (*x - a + 1 +acc + count l *)
-        if a <> b then
-        x++(-(a++1)) ++2++ acc ++ count l
-        else
-          1++acc++count l
-      else if x < a then
-        pom x l acc
-      else
-        pom x r (if a<> b then b++(-(a+1))++2++acc++count l else 1++acc++count l) (*b-a+1 +acc +count l*)
-  in pom x t 0
-
-
 let rec dodaj (x,y) t =     (* Dodaje do setu przedzial [x,y], set wejsciowy musi byc poprawny, tzn. bez [x,y] oraz bez [a,x-1],[y+1,b] - zwraca set *) 
   match t with
   |Empty -> Node(empty,(x,y),empty,1,0)
@@ -172,17 +135,53 @@ let rec dodaj (x,y) t =     (* Dodaje do setu przedzial [x,y], set wejsciowy mus
     bal l (a,b) (dodaj (x,y) r)
 
 let add (x,y) t =   (* najpierw  znajduje poprawy set, patrz wyzej, nastepnie dodaje tam (x,y) - zwraca set*)
-    let l1 = find (if x = min_int then x else x - 1) t and r1 = find (if y = max_int then y else y +1) t in
-    let kresl = match l1 with
+  let l1 = find (if x = min_int then x else x - 1) t and r1 = find (if y = max_int then y else y +1) t in
+  let kresl = match l1 with
     |Node(_,(a,b),_,_,_) -> a
     |Empty->x
-    and kresr = match r1 with
+  and kresr = match r1 with
     |Node(_,(a,b),_,_,_) -> b
     |Empty -> y
-    in let newT =  (remove (kresl,kresr) t) in  (* set poprawny*)
+  in let newT =  (remove (kresl,kresr) t) in  (* set poprawny*)
     match newT with
     |Empty -> join empty (kresl,kresr) empty
     |Node(l,(a,b),r,_,_) -> dodaj (kresl,kresr) newT;;
+
+
+let fold f t acc =
+  let rec loop acc t = match t with
+    | Empty -> acc
+    | Node (l, (a,b), r, _,_) ->
+        loop (f (a,b) (loop acc l)) r in
+  loop acc t
+
+let below x t =   (*ilosc elementow mniejszych od x w setcie - zwraca int*)
+  let rec pom x t acc =
+    match t with
+    |Empty -> acc
+    |Node(l,(a,b),r,_,_) ->
+      if a <= x && x <= b then (*x - a + 1 +acc + count l *)
+        range(a,x)++acc ++ count l
+      else if x < a then
+        pom x l acc
+      else
+        pom x r (range(a,b)++acc ++ count l) (*b-a+1 +acc +count l*)
+  in pom x t 0
+
+let mem x t = not ((find x t) = empty)    (* czy dla danego x istnieje poddrzewo, w ktorym on jest - zwraca bool*)
+
+let elements t =      (* posortowana lista przedzialow seta  - zwraca liste par intow*)
+  let rec loop acc t = match t with
+    |  Empty -> acc
+    | Node(l, k, r, _,_) -> loop (k :: loop acc r) l in
+  loop [] t
+
+let iter f t =
+  let rec loop t = match t with
+    | Empty -> ()
+    | Node (l, k, r, _,_) -> loop l; f k; loop r in
+  loop t
+
 (*
 let t1 = Node(empty,(0,40),empty,1,0);;
 let t2 = Node(empty,(85,95),empty,1,0);;
